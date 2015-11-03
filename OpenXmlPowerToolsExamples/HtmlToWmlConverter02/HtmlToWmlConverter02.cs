@@ -10,6 +10,9 @@ using System.Xml.Linq;
 using DocumentFormat.OpenXml.Packaging;
 using OpenXmlPowerTools;
 using OpenXmlPowerTools.HtmlToWml;
+#if USE_HTMLAGILITYPACK
+using HtmlAgilityPack;
+#endif
 
 namespace OpenXmlPowerTools
 {

@@ -935,6 +935,13 @@ namespace OpenXmlPowerTools.HtmlToWml
                     }
                     //if (valueForPercentage.ToString() == "auto")
 
+                    //todo: Verify if Unit is percentage will work.
+                    CssUnit? unit = assignedValue.Terms.First().Unit;
+                    if(unit == CssUnit.Percent)
+                    {
+                        return assignedValue;
+                    }
+
                     return ComputeAbsoluteLength(element, assignedValue, settings, valueForPercentage);
                 },
             },

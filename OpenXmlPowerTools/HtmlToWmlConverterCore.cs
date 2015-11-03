@@ -946,7 +946,7 @@ namespace OpenXmlPowerTools.HtmlToWml
                     {
                         return new XElement(W.tc,
                             GetCellProperties(element),
-                            element.Nodes().Select(n => Transform(n, settings, wDoc, NextExpected.Paragraph, preserveWhiteSpace)));
+                            TransformGroupByTagLevel(element.Elements(), settings, wDoc, nextExpected, preserveWhiteSpace));
                     }
                     else
                     {
@@ -1007,6 +1007,33 @@ namespace OpenXmlPowerTools.HtmlToWml
 
             return null;
 
+        }
+
+        private static IEnumerable<XElement> TransformGroupByTagLevel(IEnumerable<XElement> elements, HtmlToWmlConverterSettings settings, WordprocessingDocument wDoc, NextExpected nextExpected, bool preserveWhiteSpace)
+        {
+            int position = 0;
+            var result = elements.GroupBy(e =>
+            {
+                bool isSpan = true;
+                if (e.Name != XhtmlNoNamespace.p && e.Name != XhtmlNoNamespace.span && e.Name != XhtmlNoNamespace.img)
+                {
+                    ++position;
+                    isSpan = false;
+                }
+                return new { IsSpan = isSpan, Position = position };
+            }).SelectMany(group =>
+            {
+                if (group.Key.IsSpan)
+                {
+                    return new List<XElement> { new XElement(W.p, GetParagraphProperties(group.FirstOrDefault(), null, settings),
+                        group.Select(g => Transform(g, settings, wDoc, nextExpected, preserveWhiteSpace))) };
+                }
+                else
+                {
+                    return group.Select(g => Transform(g, settings, wDoc, NextExpected.Run, preserveWhiteSpace) as XElement);
+                }
+            });
+            return result;
         }
 
         private static XElement FontMerge(XElement higherPriorityFont, XElement lowerPriorityFont)
@@ -2882,7 +2909,7 @@ namespace OpenXmlPowerTools.HtmlToWml
                 subSuper = new XElement(W.vertAlign, new XAttribute(W.val, "subscript"));
             else
                 if (supAncestor)
-                    subSuper = new XElement(W.vertAlign, new XAttribute(W.val, "superscript"));
+                subSuper = new XElement(W.vertAlign, new XAttribute(W.val, "superscript"));
 
             XElement rFonts = null;
             if (fontFamilyString != null)
@@ -3135,6 +3162,20 @@ namespace OpenXmlPowerTools.HtmlToWml
                     new XAttribute(W._w, "0"),
                     new XAttribute(W.type, "auto"));
             }
+            CssUnit? unit = width.Terms.First()?.Unit;
+            if (unit == CssUnit.Percent)
+            {
+                double decValue;
+                if (!double.TryParse(width.Terms.First().Value, out decValue))
+                {
+                    return new XElement(W.tblW,
+                    new XAttribute(W._w, "0"),
+                    new XAttribute(W.type, "auto"));
+                }
+                return new XElement(W.tblW,
+                new XAttribute(W._w, decValue * 50),
+                new XAttribute(W.type, "pct"));
+            }
             XElement widthElement = new XElement(W.tblW,
                 new XAttribute(W._w, (long)(Twip)width),
                 new XAttribute(W.type, "dxa"));
@@ -3149,6 +3190,20 @@ namespace OpenXmlPowerTools.HtmlToWml
                 return new XElement(W.tcW,
                     new XAttribute(W._w, "0"),
                     new XAttribute(W.type, "auto"));
+            }
+            CssUnit? unit = width.Terms.First()?.Unit;
+            if (unit == CssUnit.Percent)
+            {
+                double decValue;
+                if (!double.TryParse(width.Terms.First().Value, out decValue))
+                {
+                    return new XElement(W.tcW,
+                    new XAttribute(W._w, "0"),
+                    new XAttribute(W.type, "auto"));
+                }
+                return new XElement(W.tcW,
+                new XAttribute(W._w, decValue * 50),
+                new XAttribute(W.type, "pct"));
             }
             XElement widthElement = new XElement(W.tcW,
                 new XAttribute(W._w, (long)(Twip)width),
@@ -3284,14 +3339,14 @@ namespace OpenXmlPowerTools.HtmlToWml
         private static XElement GetTableLook(XElement element)
         {
             XElement tblLook = XElement.Parse(
-                //@"<w:tblLook w:val='0600'
-                //  w:firstRow='0'
-                //  w:lastRow='0'
-                //  w:firstColumn='0'
-                //  w:lastColumn='0'
-                //  w:noHBand='1'
-                //  w:noVBand='1'
-                //  xmlns:w='http://schemas.openxmlformats.org/wordprocessingml/2006/main'/>"
+//@"<w:tblLook w:val='0600'
+//  w:firstRow='0'
+//  w:lastRow='0'
+//  w:firstColumn='0'
+//  w:lastColumn='0'
+//  w:noHBand='1'
+//  w:noVBand='1'
+//  xmlns:w='http://schemas.openxmlformats.org/wordprocessingml/2006/main'/>"
 
 @"<w:tblLook w:val='0600' xmlns:w='http://schemas.openxmlformats.org/wordprocessingml/2006/main'/>"
 
@@ -3432,8 +3487,8 @@ namespace OpenXmlPowerTools.HtmlToWml
                 vMerge = new XElement(W.vMerge);
             else
                 if (element.Attribute("HtmlToWmlVMergeRestart") != null)
-                    vMerge = new XElement(W.vMerge,
-                        new XAttribute(W.val, "restart"));
+                vMerge = new XElement(W.vMerge,
+                    new XAttribute(W.val, "restart"));
 
             string vAlignValue = (string)element.Attribute(XhtmlNoNamespace.valign);
             CssExpression verticalAlignmentProp = element.GetProp("vertical-align");
