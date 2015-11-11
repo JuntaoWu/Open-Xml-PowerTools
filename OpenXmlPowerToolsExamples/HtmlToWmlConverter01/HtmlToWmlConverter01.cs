@@ -58,7 +58,7 @@ class HtmlToWmlConverterExample
         var tempDi = new DirectoryInfo(string.Format("ExampleOutput-{0:00}-{1:00}-{2:00}-{3:00}{4:00}{5:00}", n.Year - 2000, n.Month, n.Day, n.Hour, n.Minute, n.Second));
         tempDi.Create();
 
-        foreach (var file in Directory.GetFiles("../../", "*.html")  .Where(f => f.Contains("Test-width"))  )
+        foreach (var file in Directory.GetFiles("../../", "*.html")  .Where(f => f.Contains("test-unit"))  )
         {
             ConvertToDocx(file, tempDi.FullName);
         }
@@ -84,7 +84,7 @@ class HtmlToWmlConverterExample
         HtmlToWmlConverterSettings settings = HtmlToWmlConverter.GetDefaultSettings();
         // image references in HTML files contain the path to the subdir that contains the images, so base URI is the name of the directory
         // that contains the HTML files
-        settings.BaseUriForImages = sourceHtmlFi.DirectoryName;
+        //settings.BaseUriForImages = sourceHtmlFi.DirectoryName;
 
         WmlDocument doc = HtmlToWmlConverter.ConvertHtmlToWml(defaultCss, usedAuthorCss, userCss, html, settings, null, s_ProduceAnnotatedHtml ? annotatedHtmlFi.FullName : null);
         doc.SaveAs(destDocxFi.FullName);
@@ -106,8 +106,9 @@ class HtmlToWmlConverterExample
                 HtmlDocument hdoc = new HtmlDocument();
                 hdoc.Load(sourceHtmlFi.FullName, Encoding.Default);
                 hdoc.OptionOutputAsXml = true;
-                hdoc.Save(sourceHtmlFi.FullName, Encoding.Default);
-                StringBuilder sb = new StringBuilder(File.ReadAllText(sourceHtmlFi.FullName, Encoding.Default));
+                string normalizedFileName = sourceHtmlFi.FullName + "-normalized.html";
+                hdoc.Save(normalizedFileName, Encoding.Default);
+                StringBuilder sb = new StringBuilder(File.ReadAllText(normalizedFileName, Encoding.Default));
                 sb.Replace("&amp;", "&");
                 sb.Replace("&nbsp;", "\xA0");
                 sb.Replace("&quot;", "\"");
@@ -118,7 +119,7 @@ class HtmlToWmlConverterExample
                 sb.Replace("~lt;", "&lt;");
                 sb.Replace("~gt;", "&gt;");
                 sb.Replace("~#", "&#");
-                File.WriteAllText(sourceHtmlFi.FullName, sb.ToString(), Encoding.Default);
+                File.WriteAllText(normalizedFileName, sb.ToString(), Encoding.Default);
                 html = XElement.Parse(sb.ToString());
             }
 #else

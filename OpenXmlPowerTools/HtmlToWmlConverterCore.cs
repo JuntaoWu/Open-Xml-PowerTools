@@ -1012,17 +1012,14 @@ namespace OpenXmlPowerTools.HtmlToWml
                 if (element.Name == XhtmlNoNamespace.tbody)
                     return element.Nodes().Select(n => Transform(n, settings, wDoc, NextExpected.Paragraph, preserveWhiteSpace));
 
-                if (element.Name == XhtmlNoNamespace.td)
+                if (element.Name == XhtmlNoNamespace.td || element.Name == XhtmlNoNamespace.th)
                 {
                     var tdText = element.DescendantNodes().OfType<XText>().Select(t => t.Value).StringConcatenate().Trim();
                     var hasOtherThanSpansAndParas = element.Descendants().Any(d => d.Name != XhtmlNoNamespace.span && d.Name != XhtmlNoNamespace.p);
-                    if (tdText != "" || hasOtherThanSpansAndParas)
-                    {
-                        return new XElement(W.tc,
-                            GetCellProperties(element),
-                            TransformGroupByTagLevel(element.Elements(), settings, wDoc, nextExpected, preserveWhiteSpace));
-                    }
-                    else
+                    var hasNoSpansAndParas = element.Elements().All(e => e.Name != XhtmlNoNamespace.span && e.Name != XhtmlNoNamespace.p && e.Name != XhtmlNoNamespace.img);
+                    var tdChildText = element.Nodes().OfType<XText>().Select(t => t.Value).StringConcatenate().Trim();
+
+                    if (tdChildText == "" || hasNoSpansAndParas)
                     {
                         XElement p;
                         p = new XElement(W.p,
@@ -1031,8 +1028,36 @@ namespace OpenXmlPowerTools.HtmlToWml
                                 GetRunProperties(element, settings),
                                 new XElement(W.t, "")));
                         return new XElement(W.tc,
-                            GetCellProperties(element), p);
+                            element.Name == XhtmlNoNamespace.td ? GetCellProperties(element) : GetCellHeaderProperties(element),
+                            TransformGroupByTagLevel(element.Nodes(), settings, wDoc, nextExpected, preserveWhiteSpace),
+                            p);
                     }
+                    else
+                    {
+                        return new XElement(W.tc,
+                            element.Name == XhtmlNoNamespace.td ? GetCellProperties(element) : GetCellHeaderProperties(element),
+                            TransformGroupByTagLevel(element.Nodes(), settings, wDoc, nextExpected, preserveWhiteSpace));
+                    }
+
+                    //if (tdText != "" || hasOtherThanSpansAndParas)
+                    //{
+                    //    return new XElement(W.tc,
+                    //        GetCellProperties(element),
+                    //        element.Nodes().Select(n => Transform(n, settings, wDoc, NextExpected.Paragraph, preserveWhiteSpace))
+                    //        );
+                    //    //TransformGroupByTagLevel(element.Elements(), settings, wDoc, nextExpected, preserveWhiteSpace)
+                    //}
+                    //else
+                    //{
+                    //    XElement p;
+                    //    p = new XElement(W.p,
+                    //        GetParagraphProperties(element, null, settings),
+                    //        new XElement(W.r,
+                    //            GetRunProperties(element, settings),
+                    //            new XElement(W.t, "")));
+                    //    return new XElement(W.tc,
+                    //        GetCellProperties(element), p);
+                    //}
                 }
 
                 if (element.Name == XhtmlNoNamespace.th)
@@ -1084,28 +1109,50 @@ namespace OpenXmlPowerTools.HtmlToWml
 
         }
 
-        private static IEnumerable<XElement> TransformGroupByTagLevel(IEnumerable<XElement> elements, HtmlToWmlConverterSettings settings, WordprocessingDocument wDoc, NextExpected nextExpected, bool preserveWhiteSpace)
+        private static object TransformGroupByTagLevel(IEnumerable<XNode> elements, HtmlToWmlConverterSettings settings, WordprocessingDocument wDoc, NextExpected nextExpected, bool preserveWhiteSpace)
         {
+            if(elements == null || elements.Count() == 0)
+            {
+                return null;
+            }
+            var blockLevelElement = elements.FirstOrDefault(e =>
+            {
+                XElement element = e is XElement ? e as XElement : null;
+
+                return element != null && (element.Name != XhtmlNoNamespace.p
+               && element.Name != XhtmlNoNamespace.span
+               && element.Name != XhtmlNoNamespace.img
+               && element.Name != XhtmlNoNamespace.a);
+            }) as XElement ?? elements.FirstOrDefault().Parent as XElement;
+
             int position = 0;
             var result = elements.GroupBy(e =>
             {
                 bool isSpan = true;
-                if (e.Name != XhtmlNoNamespace.p && e.Name != XhtmlNoNamespace.span && e.Name != XhtmlNoNamespace.img)
+                if (e is XElement)
                 {
-                    ++position;
-                    isSpan = false;
+                    XElement element = e as XElement;
+                    if (element.Name != XhtmlNoNamespace.p
+                    && element.Name != XhtmlNoNamespace.span
+                    && element.Name != XhtmlNoNamespace.img
+                    && element.Name != XhtmlNoNamespace.a)
+                    {
+                        ++position;
+                        isSpan = false;
+                    }
                 }
+
                 return new { IsSpan = isSpan, Position = position };
             }).SelectMany(group =>
             {
                 if (group.Key.IsSpan)
                 {
-                    return new List<XElement> { new XElement(W.p, GetParagraphProperties(group.FirstOrDefault(), null, settings),
+                    return new List<XElement> { new XElement(W.p, GetParagraphProperties(blockLevelElement, null, settings),
                         group.Select(g => Transform(g, settings, wDoc, nextExpected, preserveWhiteSpace))) };
                 }
                 else
                 {
-                    return group.Select(g => Transform(g, settings, wDoc, NextExpected.Run, preserveWhiteSpace) as XElement);
+                    return group.Select(g => Transform(g, settings, wDoc, nextExpected, preserveWhiteSpace));
                 }
             });
             return result;
@@ -2345,7 +2392,12 @@ namespace OpenXmlPowerTools.HtmlToWml
             Bitmap bmp;
             try
             {
-                bmp = new Bitmap(settings.BaseUriForImages + "/" + imageName);
+                string uriPrefix = settings.BaseUriForImages ?? "";
+                if(!string.IsNullOrEmpty(uriPrefix))
+                {
+                    uriPrefix += "/";
+                }
+                bmp = new Bitmap(uriPrefix + imageName);
             }
             catch (ArgumentException)
             {
